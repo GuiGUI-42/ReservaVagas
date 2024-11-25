@@ -1,0 +1,54 @@
+package com.example.reservavagas;
+
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.content.Context;
+import android.os.Build;
+import android.util.Log;
+
+import androidx.core.app.NotificationCompat;
+
+public class NotificationHelper {
+
+    private static final String CHANNEL_ID = "reservavagas_channel";
+    private static final String CHANNEL_NAME = "Reservar Vaga";
+    private static final String CHANNEL_DESCRIPTION = "Notificações para reserva de vagas";
+
+    private Context context;
+
+    public NotificationHelper(Context context) {
+        this.context = context;
+        createNotificationChannel();
+    }
+
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel = new NotificationChannel(
+                    CHANNEL_ID,
+                    CHANNEL_NAME,
+                    NotificationManager.IMPORTANCE_HIGH
+            );
+            channel.setDescription(CHANNEL_DESCRIPTION);
+            NotificationManager manager = context.getSystemService(NotificationManager.class);
+            if (manager != null) {
+                manager.createNotificationChannel(channel);
+            }
+            Log.d("NotificationHelper", "Criando o canal de notificação");
+        }
+    }
+
+    public void sendNotification(String titulo, String mensagem) {
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle(titulo)
+                .setContentText(mensagem)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true);
+
+        NotificationManager notificationManager =
+                (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (notificationManager != null) {
+            notificationManager.notify(1, builder.build());
+        }
+    }
+}
