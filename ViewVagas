@@ -1,0 +1,182 @@
+package com.example.reservavagas;
+
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.util.Log;
+import android.view.View;
+import android.widget.Button;
+
+import androidx.activity.EdgeToEdge;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+import android.Manifest;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.util.List;
+
+public class ViewVagas extends AppCompatActivity {
+    private SharedPreferences prefs;
+    private Handler handler;
+    private Runnable refreshRunnable;
+    private NotificationHelper notificationHelper;
+    private static final int NOTIFICATION_PERMISSION_CODE = 1001;
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        EdgeToEdge.enable(this);
+        setContentView(R.layout.activity_view_vagas);
+        // Verifica se a permissão de notificação já foi concedida
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                // Solicita a permissão ao usuário
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                        NOTIFICATION_PERMISSION_CODE);
+            }
+        }
+        // Inicializa o helper de notificações
+        notificationHelper = new NotificationHelper(this);
+
+        // Inicializando Views das vagas de estacionamento
+        View vaga1 = findViewById(R.id.vaga1);
+        View vaga2 = findViewById(R.id.vaga2);
+        View vaga3 = findViewById(R.id.vaga3);
+        View vaga4 = findViewById(R.id.vaga4);
+        View vaga5 = findViewById(R.id.vaga5);
+        View vaga6 = findViewById(R.id.vaga6);
+        View vaga7 = findViewById(R.id.vaga7);
+        View vaga8 = findViewById(R.id.vaga8);
+
+        Button att = findViewById(R.id.att);
+        Button next = findViewById(R.id.btn_nextB);
+        Button sair = findViewById(R.id.sair);
+
+        // Inicializa SharedPreferences
+        prefs = getSharedPreferences("my_prefs", MODE_PRIVATE);
+
+        // Configura os listeners para cliques nas vagas
+        setupClickListeners();
+
+        // Chama a API e processa os resultados
+        fetchVagasData();
+
+        // Configura os listeners dos botões
+        att.setOnClickListener(v -> fetchVagasData());
+
+        next.setOnClickListener(v -> {
+            Intent intent = new Intent(ViewVagas.this, ViewVagasB.class);
+            startActivity(intent);
+        });
+
+        sair.setOnClickListener(v -> {
+            Intent intent = new Intent(ViewVagas.this, MainMotorista.class);
+            startActivity(intent);
+        });
+
+        // Inicializa Handler e Runnable para refresh automático
+        handler = new Handler(Looper.getMainLooper());
+        refreshRunnable = new Runnable() {
+            @Override
+            public void run() {
+                // Chama a API para atualizar os dados
+                fetchVagasData();
+
+                // Agendar o próximo refresh em 30 segundos
+                handler.postDelayed(this, 30000); // 30000 milissegundos = 30 segundos
+            }
+        };
+
+        // Iniciar o refresh pela primeira vez
+        handler.post(refreshRunnable);
+    }
+
+    private void setupClickListeners() {
+        // IDs das vagas no layout
+        int[] vagaIds = {
+                R.id.vaga1, R.id.vaga2, R.id.vaga3, R.id.vaga4,
+                R.id.vaga5, R.id.vaga6, R.id.vaga7, R.id.vaga8
+        };
+
+        // Configura um clique para cada vaga
+        for (int i = 0; i < vagaIds.length; i++) {
+            int vagaId = vagaIds[i];
+            int vagaNumero = i + 1; // Número da vaga
+            View vagaView = findViewById(vagaId);
+
+            vagaView.setOnClickListener(v -> {
+                Log.d("ViewVagas", "Vaga " + vagaNumero + " clicada.");
+                // Envia uma notificação ao clicar na vaga
+                notificationHelper.sendNotification(
+                        "Reserva de Vaga",
+                        "Você reservou a vaga " + vagaNumero + " com sucesso!"
+                );
+            });
+        }
+    }
+
+    // Função para buscar dados das vagas e atualizar a UI
+    private void fetchVagasData() {
+        GetVAgas getVAgas = new GetVAgas(this);
+        getVAgas.executeApi(new GetVAgas.ApiCallback() {
+            @Override
+            public void onApiSuccess(List<String> vagas) {
+                Log.d("ViewVagas", "Vagas recebidas: " + vagas.toString());
+                for (String vagaInfo : vagas) {
+                    try {
+                        if (vagaInfo.startsWith("{")) {
+                            JSONObject vagaJson = new JSONObject(vagaInfo);
+                            String disponibilidade = vagaJson.getString("disponibilidade");
+                            int idVaga = vagaJson.getInt("idvaga");
+                            updateParkingSpaceView(idVaga, disponibilidade);
+                        } else {
+                            Log.e("ViewVagas", "Dados inválidos recebidos: " + vagaInfo);
+                        }
+                    } catch (JSONException e) {
+                        Log.e("ViewVagas", "Erro ao processar JSON: " + vagaInfo, e);
+                    }
+                }
+            }
+
+            @Override
+            public void onApiError(String error) {
+                Log.e("ViewVagas", "Erro ao obter dados da API: " + error);
+            }
+        });
+    }
+
+    private void updateParkingSpaceView(int idVaga, String disponibilidade) {
+        int viewId = getResources().getIdentifier("vaga" + idVaga, "id", getPackageName());
+        if (viewId == 0) return;
+
+        View parkingSpaceView = findViewById(viewId);
+        if (parkingSpaceView != null) {
+            int color = "ocupada".equalsIgnoreCase(disponibilidade)
+                    ? R.color.parking_space_occupied
+                    : R.color.parking_space_available;
+            parkingSpaceView.setBackgroundResource(color);
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        handler.removeCallbacks(refreshRunnable);
+    }
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == NOTIFICATION_PERMISSION_CODE) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Log.d("NotificationPermission", "Permissão de notificações concedida.");
+            } else {
+                Log.d("NotificationPermission", "Permissão de notificações negada.");
+            }
+        }
+    }
+}
